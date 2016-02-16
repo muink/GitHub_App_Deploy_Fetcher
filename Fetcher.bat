@@ -3,79 +3,134 @@
 :: Author: muink
 
 @echo off&title GitHub App Deploy Fetcher
-mode con: cols=80 lines=28
+color 3b
+mode con: cols=80 lines=14
 
 :[init]
 set download_url=https://github-windows.s3.amazonaws.com
 set appfile_path=GitHub.application
-set appfiles_path=%~dp0Application Files
 set manifest_tag=codebase=.*\.manifest
 set manifest_path=Application Files\GitHub_X_X_X_X\GitHub.exe.manifest
+set otherfiles_tag=size=
 set curl_path=bin\curl
+set idm_path=
+::bin check
+%curl_path% -h>nul 2>nul||echo.Bin file is corrupted, please download again...&&ping -n 3 127.0.0.1>nul&&goto [end]
+if not defined idm_path set idm_path=idman
+start "" "%idm_path%">nul 2>nul&&set choose_2=[2]Add to IDM queue(Quick)
 
 
 :[main]
 ::download appfile
-rem call:[url_coding] "%appfile_path:\=/%" "current_url"
-rem call:[path_name_cut] "%appfile_path%" "cfilepath" "cfilename"
-rem %curl_path% %current_url% -o%cfilename%
-rem call:[filetree_sort] "%cfilepath%" "%cfilename%"
-%curl_path% -O %download_url%/%appfile_path%
-
-
-::fetch manifest path
-call:[fetch_path] "%manifest_tag%" "%appfile_path%" "manifest_path"
-
-
+%curl_path% -O %download_url%/%appfile_path%||del /f/q %appfile_path%>nul 2>nul&&echo.Download failed, please check your network...&&ping -n 3 127.0.0.1>nul&&goto [end]
+::fetch manifest info
+call:[path_extract] "%manifest_tag%" "%appfile_path%" "manifest_path"
+call:[url_coding] "%manifest_path:\=/%" "c_url"
+call:[path_name_cut] "%manifest_path%" "cfilepath" "cfilename" 1
 ::download manifest file
-call:[url_coding] "%manifest_path:\=/%" "current_url"
-call:[path_name_cut] "%manifest_path%" "cfilepath" "cfilename"
-%curl_path% %current_url% -o%cfilename%
-call:[filetree_sort] "%cfilepath%" "%cfilename%"
+%curl_path% %download_url%/%c_url% -o%cfilename%||del /f/q %cfilename%>nul 2>nul&&echo.Download failed, please check your network...&&ping -n 3 127.0.0.1>nul&&goto [end]
+call:[filetree_sort] "%cfilepath%" "%cfilename%" 1
+::init2
+call:[url_coding] "%cfilepath:\=/%" "zone_url"
+set "download_url=%download_url%/%zone_url%"
+set "zone_path=%cfilepath%"
+:: that is allright!!
+
+
+:[main]choose
+setlocal enabledelayedexpansion
+cls
+echo.&echo.Primary work is over, please choose the mode you want run&echo.
+echo.    [1]Make a list file(Default)    %choose_2%&echo.
+set ny=1&set /p ny=     Please choose: 
+if "!ny!" == "1" call:[gen_list]&echo.&echo.   List generation is completed...&ping -n 3 127.0.0.1>nul&goto [end]
+if not "%choose_2%" == "" if "!ny!" == "2" (
+   call:[add_queue]
+   echo.echo.   Queue addition is complete...
+   set ny=y&set /p ny=     Start idm queue and exits this program?[Y/N]
+   if "!ny!" == "y" "%idm_path%" /s&goto [end]
+   goto [end]
+)
+endlocal
+goto [main]choose
 
 
 :[end]
-pause
+echo.&echo.Press any key to exit...&pause>nul
 goto :eof
 
 
 
-
-
-:[fetch_path]
+:[path_extract]
 setlocal enabledelayedexpansion
-for /f "delims=" %%p in ('findstr -i "%~1" "%~2"') do set temp_path="%%~p"
-set temp_path=!temp_path:^&=#26!
-set temp_path=!temp_path:^^=#5E!
-set temp_path=!temp_path:^<=[!
-set temp_path=!temp_path:^>=]!
-for /f "tokens=2 delims=@" %%p in (%temp_path:codebase=@%) do set temp_path=%%p
-for /f "tokens=1 delims=@" %%p in ("%temp_path:size=@%") do set temp_path=%%p
-for /f "tokens=1 delims==" %%p in ("%temp_path:~0,-1%") do set temp_path=%%~p
-for %%i in ("%temp_path%") do endlocal&set %~3=%%~i
+for /f "delims=" %%p in ('findstr -i "%~1" "%~2"') do set "coding_path=%%p"
+call:[path_coding] "coding_path"
+for /f "delims=" %%i in ("%coding_path%") do endlocal&set "%~3=%%i"
+goto :eof
+
+
+:[path_coding]
+setlocal enabledelayedexpansion
+set "temp_path=!%~1!"
+rem set "temp_path=!temp_path:&=#26!"
+rem set "temp_path=!temp_path:^=#5E!"
+for /f "tokens=2 delims=@" %%p in ("%temp_path:codebase=@%") do set "temp_path=%%p"
+for /f "tokens=2 delims=@" %%p in ("%temp_path:file name=@%") do set "temp_path=%%p"
+for /f "tokens=1 delims=@" %%p in ("%temp_path:size=@%") do set "temp_path=%%p"
+for /f "tokens=1 delims==" %%p in ("%temp_path:~0,-1%") do set "temp_path=%%~p"
+for /f "delims=" %%i in ("%temp_path%") do endlocal&set "%~1=%%i"
 goto :eof
 
 
 :[url_coding]
 setlocal enabledelayedexpansion
-set temp_url="%download_url%/%~1"
+set temp_url=%~1
 set temp_url=%temp_url: =@20%
 set temp_url=%temp_url:`=@60%
 set temp_url=%temp_url:{=@7B%
 set temp_url=%temp_url:}=@7D%
 set temp_url=!temp_url:@=%%!
-for %%i in (%temp_url%) do endlocal&set %~2=%%~i
+for /f "delims=" %%i in ("%temp_url%") do endlocal&set "%~2=%%i"
 goto :eof
 
 
 :[path_name_cut]
 setlocal enabledelayedexpansion
-for /f "delims=" %%i in ("%manifest_path%") do endlocal&set %~2=%%~dpi&set %~3=%%~nxi
+for /f "delims=" %%i in ("%~1") do (
+   set "temp_path=%%i"
+   if %4 == 1 set "temp_path=!temp_path:\%%~nxi=!"
+   if %4 == 0 set "temp_path=!temp_path:%%~nxi=!"
+   for /f "delims=" %%j in ('echo."!temp_path!"') do (
+      endlocal&set "%~2=%%~j"&set "%~3=%%~nxi"
+   )
+)
 goto :eof
 
 
 :[filetree_sort]
 setlocal enabledelayedexpansion
 md "%~1">nul 2>nul
-move /y "%~2" "%~1">nul
+if "%3" == "1" move /y "%~2" "%~1">nul
+goto :eof
+
+
+:[gen_list]
+setlocal enabledelayedexpansion
+::fetch other files path
+(for /f "delims=" %%p in ('findstr -i "%otherfiles_tag%" "%manifest_path%"') do (
+   set "coding_path=%%p"
+   call:[path_coding] "coding_path"
+   set "otherfiles_path=!coding_path!"
+   call:[url_coding] "!otherfiles_path:\=/!" "c_url"
+   call:[path_name_cut] "!otherfiles_path!" "cfilepath" "cfilename" 0
+   call:[filetree_sort] "%zone_path%\!cfilepath!" "!cfilename!"
+   echo.url:	%download_url%/!c_url!.deploy
+   echo.out:	%~dp0%zone_path%\!cfilepath!
+   echo.
+))>list.txt
+endlocal
+goto :eof
+
+:[add_queue]
+setlocal enabledelayedexpansion
 goto :eof
