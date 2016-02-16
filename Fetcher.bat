@@ -43,12 +43,13 @@ cls
 echo.&echo.Primary work is over, please choose the mode you want run&echo.
 echo.    [1]Make a list file(Default)    %choose_2%&echo.
 set ny=1&set /p ny=     Please choose: 
-if "!ny!" == "1" call:[gen_list]&echo.&echo.   List generation is completed...&ping -n 3 127.0.0.1>nul&goto [end]
+if "!ny!" == "1" (call:[run_mode] 1)>list.txt&echo.&echo.   List generation is completed...&ping -n 3 127.0.0.1>nul&goto [end]
 if not "%choose_2%" == "" if "!ny!" == "2" (
-   call:[add_queue]
-   echo.echo.   Queue addition is complete...
-   set ny=y&set /p ny=     Start idm queue and exits this program?[Y/N]
-   if "!ny!" == "y" "%idm_path%" /s&goto [end]
+   call:[run_mode] 2
+   echo.&echo.   Queue addition is complete...&echo.
+   set ny=y&set /p ny=Start idm queue and exits this program?[Y/N]
+   if "!ny!" == "y" "%idm_path%" /s&echo.&echo.   Queue has started...&echo.&ping -n 3 127.0.0.1>nul
+   start "" "%idm_path%"
    goto [end]
 )
 endlocal
@@ -114,23 +115,25 @@ if "%3" == "1" move /y "%~2" "%~1">nul
 goto :eof
 
 
-:[gen_list]
+:[run_mode]
 setlocal enabledelayedexpansion
 ::fetch other files path
-(for /f "delims=" %%p in ('findstr -i "%otherfiles_tag%" "%manifest_path%"') do (
+for /f "delims=" %%p in ('findstr -i "%otherfiles_tag%" "%manifest_path%"') do (
    set "coding_path=%%p"
    call:[path_coding] "coding_path"
    set "otherfiles_path=!coding_path!"
    call:[url_coding] "!otherfiles_path:\=/!" "c_url"
    call:[path_name_cut] "!otherfiles_path!" "cfilepath" "cfilename" 0
    call:[filetree_sort] "%zone_path%\!cfilepath!" "!cfilename!"
-   echo.url:	%download_url%/!c_url!.deploy
-   echo.out:	%~dp0%zone_path%\!cfilepath!
-   echo.
-))>list.txt
+   if %1 == 1 (
+      echo.url:	%download_url%/!c_url!.deploy
+      echo.out:	%~dp0%zone_path%\!cfilepath!
+      echo.
+   )
+   if %1 == 2 (
+      set "download_path=%~dp0%zone_path%\!cfilepath!"
+      "%idm_path%" /d %download_url%/!c_url!.deploy /p "!download_path:~0,-1!" /a
+   )
+)
 endlocal
-goto :eof
-
-:[add_queue]
-setlocal enabledelayedexpansion
 goto :eof
